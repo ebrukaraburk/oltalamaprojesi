@@ -2,3 +2,10 @@ data/raw/
 data/processed/
 rag_db/
 .venv/
+
+__pycache__/
+*.pyc
+.venv/
+data/
+models/
+rag_db/
