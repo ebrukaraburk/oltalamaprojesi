@@ -1,0 +1,4 @@
+data/raw/
+data/processed/
+rag_db/
+.venv/

@@ -1,0 +1,10 @@
+pandas
+scikit-learn
+datasets
+chromadb
+langchain-text-splitters
+langgraph
+requests
+streamlit
+joblib
+tldextract
