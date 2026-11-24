@@ -1,13 +1,14 @@
 import re, sys
 import joblib
 sys.path.insert(0, ".")
-from src.url_model import url_risk
+from src.url_model import url_risk, is_trusted
 from src.features import url_features
 
 # ---- Ağırlıklar (sonra test setinde ayarlanabilir) ----
 W_TEXT = 0.5
 W_URL = 0.5
 LOW_MAX, MID_MAX = 33, 66          # 0-33 düşük, 34-66 orta, 67-100 yüksek
+LINK_ONLY_MAX = 0.85               # yalnızca bağlantı varsa tek model kesin hüküm vermesin
 
 _tb = joblib.load("models/text_model.joblib")
 _vec, _clf = _tb["vectorizer"], _tb["model"]
@@ -79,6 +80,8 @@ def detect_signals(body):
 
 def url_reasons(url):
     """Bağlantıdaki şüpheli özellikleri sade Türkçe cümlelere çevirir."""
+    if is_trusted(url):
+        return ["bilinen ve güvenilir bir kurumun resmi alan adı"]
     f = url_features(url)
     r = []
     if f["is_shortener"]:
@@ -114,13 +117,14 @@ def analyze(message):
     t = text_risk(body) if has_text else None
     url_scores = [(u, url_risk(u)) for u in urls]
     u = max((p for _, p in url_scores), default=None)
+    link_only = t is None and u is not None
 
     if t is not None and u is not None:
         p = W_TEXT * t + W_URL * u
     elif t is not None:
         p = t
     elif u is not None:
-        p = u
+        p = min(u, LINK_ONLY_MAX)       # tek modele dayanan sonuç 85'i geçmesin
     else:
         return None
 
@@ -131,6 +135,8 @@ def analyze(message):
         "level": level,
         "text_prob": t,
         "url_probs": url_scores,
+        "link_only": link_only,
+        "trusted_urls": [u_ for u_, _ in url_scores if is_trusted(u_)],
         "highlights": highlight_terms(body) if (has_text and level != "düşük") else [],
         "signals": detect_signals(body) if level != "düşük" else {},
         "url_reasons": {u_: url_reasons(u_) for u_, _ in url_scores},
@@ -145,11 +151,12 @@ if __name__ == "__main__":
         "Merhaba, yarınki toplantı saat 14:00'te yapılacaktır. Gündem maddeleri ekte yer almaktadır. "
         "Sorularınız için bizimle iletişime geçebilirsiniz. Saygılarımızla.",
         "https://bit.ly/3xYzAbc",
+        "https://claude.ai/chat/b39875fb-2a98-4254-8e9f-0bc043d132cb",
     ]
     for m in tests:
         r = analyze(m)
         print("\nMESAJ:", m[:80], "...")
-        print("PUAN:", r["score"], "->", r["level"])
+        print("PUAN:", r["score"], "->", r["level"], "| yalnızca link:", r["link_only"])
         print("metin olasılığı:", r["text_prob"], "| url:", r["url_probs"])
         print("işaretlenen ifadeler:", r["highlights"])
         print("sinyaller:", r["signals"])
